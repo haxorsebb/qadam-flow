@@ -304,6 +304,12 @@ export const flagService = (_log: FastifyBaseLogger) => ({
                 created,
                 updated,
             },
+            {
+                id: ApFlagId.SYSTEM_AUTH_ENABLED,
+                value: process.env.AP_SYSTEM_AUTH_ENABLED === 'true',
+                created,
+                updated,
+            },
         )
 
         // Commit-level build provenance is more precise than CURRENT_VERSION/LATEST_VERSION

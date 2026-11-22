@@ -6,6 +6,7 @@ import {
   ClaimTokenRequest,
   FederatedAuthnLoginResponse,
   LdapSignInRequest,
+  SystemSignInRequest,
   SignInRequest,
   SignUpRequest,
   SwitchPlatformRequest,
@@ -24,6 +25,9 @@ export const authenticationApi = {
   },
   ldapSignIn(request: LdapSignInRequest) {
     return api.post<AuthenticationResponse>('/v1/authn/ldap/sign-in', request);
+  },
+  systemSignIn(request: SystemSignInRequest) {
+    return api.post<AuthenticationResponse>('/v1/authn/system/sign-in', request);
   },
   signUp(request: SignUpRequest) {
     return api.post<AuthenticationResponse>(

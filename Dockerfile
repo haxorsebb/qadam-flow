@@ -144,8 +144,24 @@ RUN node -e "\
   process.stdout.write(JSON.stringify(names));\
 " > packages/server/api/dist/src/migration-manifest.json
 
-### STAGE 2: Run ###
-FROM base AS run
+### STAGE 2: Appliance runtime (Debian 13 with PAM/NSS/SSSD clients) ###
+# The Node/Bun/isolated-vm build remains on its verified Node 24 toolchain.
+# Release qualification pins the app-base by digest; local POC uses the tagged image.
+ARG APP_BASE_IMAGE=ghcr.io/haxorsebb/n8n-appliance-app-base:debian13
+FROM ${APP_BASE_IMAGE} AS run
+
+# Node 24 and Bun use glibc ABI compatible with newer Debian 13 userspace.
+# Retain the exact isolated-vm binary compiled against the Node build stage.
+COPY --from=base /usr/local/ /usr/local/
+COPY --from=base /usr/src/node_modules/ /usr/src/node_modules/
+ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8 REDISMS_DISABLE_POSTINSTALL=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        pamtester tini locales openssh-client python3 git curl unzip \
+        poppler-utils poppler-data procps iptables libcap2 libstdc++6 \
+    && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \
+    && locale-gen en_US.UTF-8 \
+    && printf '%s\\n' 'auth required pam_sss.so' 'account required pam_sss.so' > /etc/pam.d/qadam \
+    && rm -rf /var/lib/apt/lists/*
 
 ARG QADAM_FLAVOUR=fat
 # Anything other than `fat`/`slim` would otherwise silently skip the slim-prune check below (its

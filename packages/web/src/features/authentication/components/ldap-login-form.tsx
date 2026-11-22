@@ -3,6 +3,7 @@ import {
   ErrorCode,
   isNil,
   LdapSignInRequest,
+  SystemSignInRequest,
 } from '@aiqadam/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
@@ -26,14 +27,15 @@ import { authenticationSession } from '@/lib/authentication-session';
 import { useRedirectAfterLogin } from '@/lib/navigation-utils';
 
 type LdapLoginFormProps = {
-  onBack: () => void;
+  onBack?: () => void;
+  systemMode?: boolean;
 };
 
-export const LdapLoginForm = ({ onBack }: LdapLoginFormProps) => {
+export const LdapLoginForm = ({ onBack, systemMode = false }: LdapLoginFormProps) => {
   const redirectAfterLogin = useRedirectAfterLogin();
 
   const form = useForm<LdapSignInRequest>({
-    resolver: zodResolver(LdapSignInRequest),
+    resolver: zodResolver(systemMode ? SystemSignInRequest : LdapSignInRequest),
     defaultValues: { username: '', password: '' },
     mode: 'onChange',
   });
@@ -43,7 +45,7 @@ export const LdapLoginForm = ({ onBack }: LdapLoginFormProps) => {
     HttpError,
     LdapSignInRequest
   >({
-    mutationFn: authenticationApi.ldapSignIn,
+    mutationFn: systemMode ? authenticationApi.systemSignIn : authenticationApi.ldapSignIn,
     onSuccess: (data) => {
       authenticationSession.saveResponse(data, false);
       redirectAfterLogin();
@@ -65,7 +67,7 @@ export const LdapLoginForm = ({ onBack }: LdapLoginFormProps) => {
         })}
       >
         <p className="text-sm text-muted-foreground">
-          {t('Sign in with your directory username and password.')}
+          {systemMode ? t('Sign in with your appliance username and password.') : t('Sign in with your directory username and password.')}
         </p>
         <FormField
           name="username"
@@ -115,10 +117,12 @@ export const LdapLoginForm = ({ onBack }: LdapLoginFormProps) => {
         >
           {t('Sign in')}
         </Button>
-        <Button variant="ghost" type="button" onClick={onBack}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          {t('Back to sign in')}
-        </Button>
+        {!systemMode && onBack && (
+          <Button variant="ghost" type="button" onClick={onBack}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            {t('Back to sign in')}
+          </Button>
+        )}
       </form>
     </Form>
   );

@@ -175,6 +175,9 @@ const AuthFormTemplate = React.memo(
     const { data: isLdapAuthEnabled } = flagsHooks.useFlag<boolean>(
       ApFlagId.LDAP_AUTH_ENABLED,
     );
+    const { data: isSystemAuthEnabled } = flagsHooks.useFlag<boolean>(
+      ApFlagId.SYSTEM_AUTH_ENABLED,
+    );
     const data = {
       signin: {
         title: t('Welcome back'),
@@ -194,6 +197,14 @@ const AuthFormTemplate = React.memo(
 
     if (token) {
       return null;
+    }
+
+    if (isSystemAuthEnabled) {
+      return (
+        <AuthLayout isSignUp={false}>
+          <LdapLoginForm systemMode />
+        </AuthLayout>
+      );
     }
 
     if (showSamlLogin) {
