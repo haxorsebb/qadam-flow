@@ -1,5 +1,6 @@
 import {
     ALL_PRINCIPAL_TYPES,
+    CreateTemplateRequestBody,
     isNil,
     ListTemplatesRequestQuery,
     Principal,
@@ -9,6 +10,7 @@ import {
     TemplateType,
 } from '@aiqadam/shared'
 import { FastifyBaseLogger } from 'fastify'
+import { StatusCodes } from 'http-status-codes'
 import { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 import { securityAccess } from '../core/security/authorization/fastify-security'
@@ -17,6 +19,16 @@ import { communityTemplates } from './community-templates.service'
 import { templateService } from './template.service'
 
 export const templateController: FastifyPluginAsyncZod = async (app) => {
+    // Minimal share-link creation for the POC. Restrict publication to platform
+    // administrators until a separately authorized company catalog is designed.
+    app.post('/', CreateSharedTemplateParams, async (request, reply) => {
+        const template = await templateService(request.log).create({
+            platformId: request.principal.platform.id,
+            params: request.body,
+        })
+        return reply.status(StatusCodes.CREATED).send(template)
+    })
+
     app.get('/:id', GetParams, async (request) => {
         const template = await templateService(app.log).getOne({ id: request.params.id })
         if (!isNil(template)) {
@@ -40,6 +52,21 @@ export const templateController: FastifyPluginAsyncZod = async (app) => {
         }
     })
 
+}
+
+const CreateSharedTemplateParams = {
+    config: {
+        security: securityAccess.platformAdminOnly([PrincipalType.USER]),
+    },
+    schema: {
+        tags: ['templates'],
+        description: 'Create a shared workflow template.',
+        security: [SERVICE_KEY_SECURITY_OPENAPI],
+        body: CreateTemplateRequestBody.extend({ type: z.literal(TemplateType.SHARED) }),
+        response: {
+            [StatusCodes.CREATED]: Template,
+        },
+    },
 }
 
 const GetIdParams = z.object({
