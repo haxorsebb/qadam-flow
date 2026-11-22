@@ -1,5 +1,7 @@
 import { ApplicationEventName,
     isNil,
+    ErrorCode,
+    QadamFlowError,
     PrincipalType,
     SignInRequest,
     SignUpRequest,
@@ -23,6 +25,9 @@ export const authenticationController: FastifyPluginAsyncZod = async (
     app,
 ) => {
     app.post('/sign-up', SignUpRequestOptions, async (request) => {
+        if (process.env.AP_SYSTEM_AUTH_ENABLED === 'true') {
+            throw new QadamFlowError({ code: ErrorCode.INVALID_CREDENTIALS, params: null })
+        }
 
         const platformId = await platformUtils.getPlatformIdForRequest(request)
         const signUpResponse = await authenticationService(request.log).signUp({
@@ -49,6 +54,9 @@ export const authenticationController: FastifyPluginAsyncZod = async (
     })
 
     app.post('/sign-in', SignInRequestOptions, async (request) => {
+        if (process.env.AP_SYSTEM_AUTH_ENABLED === 'true') {
+            throw new QadamFlowError({ code: ErrorCode.INVALID_CREDENTIALS, params: null })
+        }
 
         const predefinedPlatformId = await platformUtils.getPlatformIdForRequest(request)
         const response = await authenticationService(request.log).signInWithPassword({

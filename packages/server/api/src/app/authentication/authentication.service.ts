@@ -199,7 +199,7 @@ export const authenticationService = (log: FastifyBaseLogger) => ({
 // session time back, which the "never outlive" framing exists specifically to prevent. Every
 // non-LDAP identity is unaffected: this only shortens (never extends) the default.
 function getSwitchPlatformExpiresInSeconds({ identity, currentTokenExpiresAtSeconds }: GetSwitchPlatformExpiresInSecondsParams): number | undefined {
-    if (identity.provider !== UserIdentityProvider.LDAP || isNil(currentTokenExpiresAtSeconds)) {
+    if ((identity.provider !== UserIdentityProvider.LDAP && identity.provider !== UserIdentityProvider.SYSTEM) || isNil(currentTokenExpiresAtSeconds)) {
         return undefined
     }
     const remainingSeconds = currentTokenExpiresAtSeconds - Math.floor(Date.now() / 1000)
