@@ -1,0 +1,18 @@
+# Optional override for issue #132 testing on the physical development appliance.
+# Combine with poc/issue-132/compose.yaml. Do not merge into the release runtime.
+# The Qadam APP needs SSSD PAM/NSS clients; the WORKER must not access host sockets.
+services:
+  app:
+    environment:
+      AP_SYSTEM_AUTH_ENABLED: "true"
+      AP_SYSTEM_AUTH_OWNER_USERNAME: administrator
+      AP_SYSTEM_AUTH_PAM_SERVICE: qadam
+      AP_SYSTEM_AUTH_USER_GROUP: qadam-users
+      AP_SYSTEM_AUTH_ADMIN_GROUP: qadam-admins
+    volumes:
+      - type: bind
+        source: /var/lib/sss/pipes
+        target: /var/lib/sss/pipes
+        read_only: true
+    tmpfs:
+      - /var/lib/sss/pipes/private:mode=0700
