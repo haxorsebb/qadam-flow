@@ -9,6 +9,9 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:18080:80"
+    networks:
+      - default
+      - ingress
     env_file: .env
     environment:
       AP_CONTAINER_TYPE: APP
@@ -73,3 +76,5 @@ volumes:
 networks:
   default:
     internal: true
+  ingress:
+    driver: bridge
