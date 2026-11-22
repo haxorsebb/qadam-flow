@@ -8,6 +8,7 @@ export enum UserIdentityProvider {
     SAML = 'SAML',
     JWT = 'JWT',
     LDAP = 'LDAP',
+    SYSTEM = 'SYSTEM',
 }
 export const UserIdentity = z.object({
     ...BaseModelSchema,

@@ -1,27 +1,19 @@
-import { cryptoUtils } from '@aiqadam/server-utils'
 import {
     AuthenticationResponse,
-    ErrorCode,
     FederatedIdentityProvider,
+    UserIdentityProvider,
+    ErrorCode,
     isNil,
     LdapTestStage,
     PlatformId,
-    PlatformRole,
     QadamFlowError,
     tryCatch,
-    UserIdentity,
-    UserIdentityProvider,
     UserStatus,
 } from '@aiqadam/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { Entry } from 'ldapts'
-import { EntityManager } from 'typeorm'
-import { transaction } from '../../core/db/transaction'
-import { platformService } from '../../platform/platform.service'
-import { userService } from '../../user/user-service'
 import { authenticationUtils } from '../authentication-utils'
-import { userFederatedIdentityService } from '../federated-identity/user-federated-identity-service'
-import { userIdentityService } from '../user-identity/user-identity-service'
+import { verifiedIdentityService } from '../verified-identity-service'
 import { ldapAttributeUtils } from './ldap-attributes'
 import { ldapClient } from './ldap-client'
 import { ldapConfigService, ResolvedLdapConfig } from './ldap-config-service'
@@ -63,7 +55,21 @@ export const ldapAuthnService = (log: FastifyBaseLogger) => ({
         const firstName = ldapAttributeUtils.readStringAttribute({ entry, name: resolved.config.attributeMap.firstName }) ?? username
         const lastName = ldapAttributeUtils.readStringAttribute({ entry, name: resolved.config.attributeMap.lastName }) ?? ''
 
-        const user = await resolveUser({ platformId, config: resolved.config, subject, email, firstName, lastName, log })
+        const user = await verifiedIdentityService(log).resolveOrCreate({
+            platformId,
+            verified: {
+                provider: FederatedIdentityProvider.LDAP,
+                identityProvider: UserIdentityProvider.LDAP,
+                subject,
+                username,
+                email,
+                firstName,
+                lastName,
+                groups: memberGroupDns,
+            },
+            jitProvisioning: resolved.config.jitProvisioning,
+            linkExistingByEmail: resolved.config.linkExistingByEmail,
+        })
         if (user.status === UserStatus.INACTIVE) {
             throw new QadamFlowError({ code: ErrorCode.USER_IS_INACTIVE, params: { email } })
         }
@@ -202,119 +208,6 @@ function mapToSignInError(error: unknown): QadamFlowError {
     }
 }
 
-async function resolveUser({ platformId, config, subject, email, firstName, lastName, log }: ResolveUserParams): Promise<{ id: string, status: UserStatus }> {
-    const bySubject = await userFederatedIdentityService(log).findBySubject({ platformId, provider: FederatedIdentityProvider.LDAP, subject })
-    if (!isNil(bySubject)) {
-        const user = await userService(log).getOrThrow({ id: bySubject.userId })
-        return { id: user.id, status: user.status }
-    }
-
-    const identity = await userIdentityService(log).getIdentityByEmail(email)
-    if (!isNil(identity)) {
-        return linkOrAdoptExistingIdentity({ platformId, config, subject, identity, log })
-    }
-
-    if (!config.jitProvisioning) {
-        throw new QadamFlowError({ code: ErrorCode.INVALID_CREDENTIALS, params: null })
-    }
-    // Identity + user + federated row created atomically (one transaction): a crash or error
-    // between any two of these steps must never leave, say, an identity with no federated row
-    // (which would otherwise be a permanently unreachable account — the email is now "taken" by
-    // an identity nothing can sign in as, since local password sign-in also refuses `provider ===
-    // LDAP`; see `userIdentityService.verifyIdentityPassword`).
-    return transaction((entityManager) => provisionNewUser({ platformId, subject, email, firstName, lastName, log, entityManager }))
-}
-
-// Reached only by an *email* match — a subject match above is the common, fast path for a user who
-// already has a federated row and never touches this function at all. Reaching here by email means
-// establishing (or re-establishing) the platformId/subject association, which is exactly the
-// moment a hostile directory admin could try to redirect an existing account, so every path
-// through this function is gated by `assertIdentityIsNotPrivilegedElsewhere` first, regardless of
-// whether the identity is already LDAP-managed or still local.
-async function linkOrAdoptExistingIdentity({ platformId, config, subject, identity, log }: LinkOrAdoptParams): Promise<{ id: string, status: UserStatus }> {
-    await assertIdentityIsNotPrivilegedElsewhere({ identity, platformId, log })
-
-    if (identity.provider === UserIdentityProvider.LDAP) {
-        // Already migrated to LDAP — this is the recovery path (B3), scoped to *this* platform
-        // only: the user row on `platformId` was deleted, or a previous JIT died after creating the
-        // identity but before the federated row. It is never a route onto a *different* platform —
-        // `assertIdentityIsNotPrivilegedElsewhere`, called just above, already refuses any identity
-        // that has a user row on another platform, so this branch is unreachable for a "first
-        // sign-in elsewhere" case; it would be a collision, not a recovery. No password scramble
-        // here — the identity has no local password to protect in the first place, and re-running
-        // `linkToFederatedProvider` would immediately trip its own `updatePassword` guard against
-        // `provider === LDAP`.
-        return transaction((entityManager) => adoptExistingLdapIdentity({ platformId, subject, identity, log, entityManager }))
-    }
-    if (!config.linkExistingByEmail) {
-        throw new QadamFlowError({ code: ErrorCode.LDAP_ACCOUNT_COLLISION, params: { email: identity.email } })
-    }
-    return transaction((entityManager) => linkLocalIdentityToLdap({ platformId, subject, identity, log, entityManager }))
-}
-
-// B1 (cross-platform takeover) + B2 (owner/admin takeover): an identity that already has a user
-// row on some *other* platform, or that holds `platformRole: ADMIN` (which includes the owner —
-// `platformService.create` always promotes the owner to ADMIN) on *any* platform, is refused
-// unconditionally, with the same `LDAP_ACCOUNT_COLLISION` a plain email collision gets — never
-// distinguished, so a caller cannot use the response to learn which case applied. This is the
-// owner's break-glass: the owner can never be linked or adopted by any directory, on any platform,
-// so their local password sign-in always keeps working.
-async function assertIdentityIsNotPrivilegedElsewhere({ identity, platformId, log }: AssertNotPrivilegedParams): Promise<void> {
-    const platform = await platformService(log).getOneOrThrow(platformId)
-    const existingUsers = await userService(log).getByIdentityId({ identityId: identity.id })
-    const isPrivilegedOrOwnerAnywhere = existingUsers.some((user) => user.platformRole === PlatformRole.ADMIN || user.id === platform.ownerId)
-    const hasUserOnAnotherPlatform = existingUsers.some((user) => !isNil(user.platformId) && user.platformId !== platformId)
-    if (isPrivilegedOrOwnerAnywhere || hasUserOnAnotherPlatform) {
-        throw new QadamFlowError({ code: ErrorCode.LDAP_ACCOUNT_COLLISION, params: { email: identity.email } })
-    }
-}
-
-async function adoptExistingLdapIdentity({ platformId, subject, identity, log, entityManager }: AdoptExistingLdapIdentityParams): Promise<{ id: string, status: UserStatus }> {
-    const user = await userService(log).getOrCreateWithProject({ identity, platformId, entityManager })
-    const existingFederatedRow = await userFederatedIdentityService(log).findByUser({ platformId, userId: user.id, provider: FederatedIdentityProvider.LDAP, entityManager })
-    if (isNil(existingFederatedRow)) {
-        await userFederatedIdentityService(log).create({ platformId, userId: user.id, provider: FederatedIdentityProvider.LDAP, subject, entityManager })
-        return { id: user.id, status: user.status }
-    }
-    if (existingFederatedRow.subject !== subject) {
-        // Decision (documented, not a default we fell into): the directory's own identifier for
-        // this email changed under an existing, already-linked row on this exact platform — the
-        // object could have been deleted and recreated, possibly by a different real person who
-        // was later assigned the same address. Silently repointing the row to the new subject
-        // would hand that new directory entry the old one's account with no admin involved.
-        // Refuse instead; re-linking a rotated subject is a deliberate admin action (P2), not
-        // something a sign-in attempt does on its own.
-        throw new QadamFlowError({ code: ErrorCode.LDAP_ACCOUNT_COLLISION, params: { email: identity.email } })
-    }
-    return { id: user.id, status: user.status }
-}
-
-async function linkLocalIdentityToLdap({ platformId, subject, identity, log, entityManager }: LinkLocalIdentityParams): Promise<{ id: string, status: UserStatus }> {
-    await userIdentityService(log).linkToFederatedProvider({ id: identity.id, provider: UserIdentityProvider.LDAP, entityManager })
-    const user = await userService(log).getOrCreateWithProject({ identity, platformId, entityManager })
-    await userFederatedIdentityService(log).create({ platformId, userId: user.id, provider: FederatedIdentityProvider.LDAP, subject, entityManager })
-    log.info({ platformId, userId: user.id, identityId: identity.id }, 'Linked existing local account to LDAP by email')
-    return { id: user.id, status: user.status }
-}
-
-async function provisionNewUser({ platformId, subject, email, firstName, lastName, log, entityManager }: ProvisionNewUserParams): Promise<{ id: string, status: UserStatus }> {
-    const identity: UserIdentity = await userIdentityService(log).create({
-        email,
-        firstName,
-        lastName,
-        password: await cryptoUtils.generateRandomPassword(),
-        provider: UserIdentityProvider.LDAP,
-        verified: true,
-        trackEvents: false,
-        newsLetter: false,
-        entityManager,
-    })
-    const user = await userService(log).getOrCreateWithProject({ identity, platformId, entityManager })
-    await userFederatedIdentityService(log).create({ platformId, userId: user.id, provider: FederatedIdentityProvider.LDAP, subject, entityManager })
-    log.info({ platformId, userId: user.id }, 'JIT-provisioned a new user via LDAP')
-    return { id: user.id, status: user.status }
-}
-
 type SignInParams = {
     platformId: PlatformId
     username: string
@@ -334,52 +227,3 @@ type PerformDummyBindParams = {
     log: FastifyBaseLogger
 }
 
-type ResolveUserParams = {
-    platformId: PlatformId
-    config: ResolvedLdapConfig['config']
-    subject: string
-    email: string
-    firstName: string
-    lastName: string
-    log: FastifyBaseLogger
-}
-
-type LinkOrAdoptParams = {
-    platformId: PlatformId
-    config: ResolvedLdapConfig['config']
-    subject: string
-    identity: UserIdentity
-    log: FastifyBaseLogger
-}
-
-type AssertNotPrivilegedParams = {
-    identity: UserIdentity
-    platformId: PlatformId
-    log: FastifyBaseLogger
-}
-
-type AdoptExistingLdapIdentityParams = {
-    platformId: PlatformId
-    subject: string
-    identity: UserIdentity
-    log: FastifyBaseLogger
-    entityManager: EntityManager
-}
-
-type LinkLocalIdentityParams = {
-    platformId: PlatformId
-    subject: string
-    identity: UserIdentity
-    log: FastifyBaseLogger
-    entityManager: EntityManager
-}
-
-type ProvisionNewUserParams = {
-    platformId: PlatformId
-    subject: string
-    email: string
-    firstName: string
-    lastName: string
-    log: FastifyBaseLogger
-    entityManager: EntityManager
-}

@@ -9,6 +9,7 @@ import { BaseModelSchema } from '../common/base-model'
 // directory identity and readable/writable by ordinary platform-admin routes.
 export enum FederatedIdentityProvider {
     LDAP = 'LDAP',
+    SYSTEM = 'SYSTEM',
 }
 
 export const UserFederatedIdentity = z.object({

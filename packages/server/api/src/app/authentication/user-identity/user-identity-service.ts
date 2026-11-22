@@ -53,7 +53,7 @@ export const userIdentityService = (log: FastifyBaseLogger) => ({
         // hash never matching. The response is identical to "no such identity" (`INVALID_
         // CREDENTIALS`, no distinguishing detail) so a caller cannot use this endpoint to discover
         // that an email is provisioned via the directory.
-        if (!isNil(userIdentity) && userIdentity.provider === UserIdentityProvider.LDAP) {
+        if (!isNil(userIdentity) && (userIdentity.provider === UserIdentityProvider.LDAP || userIdentity.provider === UserIdentityProvider.SYSTEM)) {
             throw new QadamFlowError({
                 code: ErrorCode.INVALID_CREDENTIALS,
                 params: null,
@@ -104,7 +104,7 @@ export const userIdentityService = (log: FastifyBaseLogger) => ({
     },
     async updatePassword(params: UpdatePasswordParams): Promise<void> {
         const identity = await userIdentityRepository(params.entityManager).findOneByOrFail({ id: params.id })
-        if (identity.provider === UserIdentityProvider.LDAP) {
+        if (identity.provider === UserIdentityProvider.LDAP || identity.provider === UserIdentityProvider.SYSTEM) {
             throw new QadamFlowError({
                 code: ErrorCode.VALIDATION,
                 params: {
