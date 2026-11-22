@@ -160,7 +160,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         poppler-utils poppler-data procps iptables libcap2 libstdc++6 \
     && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \
     && locale-gen en_US.UTF-8 \
-    && printf '%s\\n' 'auth required pam_sss.so' 'account required pam_sss.so' > /etc/pam.d/qadam \
+    && printf '%s\n' 'auth required pam_sss.so' 'account required pam_sss.so' > /etc/pam.d/qadam \
     && rm -rf /var/lib/apt/lists/*
 
 ARG QADAM_FLAVOUR=fat
