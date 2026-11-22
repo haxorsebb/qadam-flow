@@ -115,7 +115,7 @@ ENV TURBO_API=$TURBO_API \
 # Build frontend, engine, server API, worker, and all bundled qadams.
 # Qadams must be pre-compiled because the runtime loader scans `<qadam>/dist/`
 # in standalone mode (no cloud registry).
-RUN --network=host npx turbo run build --filter=web --filter=@aiqadam/engine --filter=api --filter=worker --filter='@aiqadam/qadam-*'
+RUN npx turbo run build --filter=web --filter=@aiqadam/engine --filter=api --filter=worker --filter='@aiqadam/qadam-*'
 
 # NOT wired up here (deliberately, #807): ADR-0003's version-store seed (#804, `build-image-seed.mjs`)
 # and #778's catalogue snapshot. The issue thread gated the store seed explicitly: "Seed only after
