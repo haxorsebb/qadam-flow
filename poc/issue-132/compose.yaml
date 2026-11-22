@@ -1,0 +1,75 @@
+# Disposable, isolated Phase-A POC for n8n-appliance issue #132.
+# Run from sebbai's separate qadam-flow checkout, not from n8n-appliance.
+name: qadam132
+
+services:
+  app:
+    image: qadam-flow:poc-23cb816cfbb8
+    pull_policy: never
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18080:80"
+    env_file: .env
+    environment:
+      AP_CONTAINER_TYPE: APP
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - cache:/usr/src/app/cache
+      - qadam_versions:/var/lib/qadam-flow/qadam-versions
+
+  worker:
+    image: qadam-flow:poc-23cb816cfbb8
+    pull_policy: never
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      AP_CONTAINER_TYPE: WORKER
+      AP_WORKER_API_URL: http://app:80
+    depends_on:
+      - app
+    stop_grace_period: 90s
+    volumes:
+      - cache:/usr/src/app/cache
+      - qadam_versions:/var/lib/qadam-flow/qadam-versions:ro
+
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: qadam_flow_poc
+      POSTGRES_USER: qadam
+      POSTGRES_PASSWORD: ${AP_POSTGRES_PASSWORD:?Missing AP_POSTGRES_PASSWORD in the POC env file}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qadam -d qadam_flow_poc"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: valkey/valkey:8.1.11
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  cache:
+  qadam_versions:
+  pgdata:
+  redis_data:
+
+# The first POC boot requires no outbound connectivity. Later tests will
+# require explicit, constrained access to the local inference endpoints.
+networks:
+  default:
+    internal: true
