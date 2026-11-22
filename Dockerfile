@@ -1,3 +1,5 @@
+ARG APP_BASE_IMAGE=ghcr.io/haxorsebb/n8n-appliance-app-base:debian13
+
 FROM node:24.21.0-bookworm-slim AS base
 
 ARG SKIP_SSL_VERIFY=
@@ -147,7 +149,6 @@ RUN node -e "\
 ### STAGE 2: Appliance runtime (Debian 13 with PAM/NSS/SSSD clients) ###
 # The Node/Bun/isolated-vm build remains on its verified Node 24 toolchain.
 # Release qualification pins the app-base by digest; local POC uses the tagged image.
-ARG APP_BASE_IMAGE=ghcr.io/haxorsebb/n8n-appliance-app-base:debian13
 FROM ${APP_BASE_IMAGE} AS run
 
 # Node 24 and Bun use glibc ABI compatible with newer Debian 13 userspace.
