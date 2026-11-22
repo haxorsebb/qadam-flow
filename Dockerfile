@@ -155,14 +155,14 @@ FROM ${APP_BASE_IMAGE} AS run
 # Retain the exact isolated-vm binary compiled against the Node build stage.
 COPY --from=base /usr/local/ /usr/local/
 COPY --from=base /usr/src/node_modules/ /usr/src/node_modules/
-ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8 REDISMS_DISABLE_POSTINSTALL=1
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 REDISMS_DISABLE_POSTINSTALL=1
+# The appliance base already supplies libpam-sss and libnss-sss.
+# Build-time compilers and utilities stay in the build stage; add runtime
+# dependencies individually only after a demonstrated application requirement.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        pamtester tini locales openssh-client python3 git curl unzip \
-        poppler-utils poppler-data procps iptables libcap2 libstdc++6 \
-    && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \
-    && locale-gen en_US.UTF-8 \
+        pamtester tini \
     && printf '%s\n' 'auth required pam_sss.so' 'account required pam_sss.so' > /etc/pam.d/qadam \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 ARG QADAM_FLAVOUR=fat
 # Anything other than `fat`/`slim` would otherwise silently skip the slim-prune check below (its
