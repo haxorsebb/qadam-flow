@@ -4,7 +4,7 @@ name: qadam132
 
 services:
   app:
-    image: qadam-flow:poc-23cb816cfbb8
+    image: qadam-flow:poc-ed75e16
     pull_policy: never
     restart: unless-stopped
     ports:
@@ -25,7 +25,7 @@ services:
       - qadam_versions:/var/lib/qadam-flow/qadam-versions
 
   worker:
-    image: qadam-flow:poc-23cb816cfbb8
+    image: qadam-flow:poc-ed75e16
     pull_policy: never
     restart: unless-stopped
     env_file: .env
