@@ -25,7 +25,7 @@ export const systemReconcileService = (log: FastifyBaseLogger) => ({
                     fn: async () => {
                         // Projects must be visible even before a marked-group
                         // member logs in for the first time.
-                        await groups.ensureMarkedTeamProjects({ platformId: platform.id, marked })
+                        const projects = await groups.ensureMarkedTeamProjects({ platformId: platform.id, marked })
                         const identities = await userFederatedIdentityService(log).listByPlatformAndProvider({
                             platformId: platform.id,
                             provider: FederatedIdentityProvider.SYSTEM,
@@ -40,6 +40,7 @@ export const systemReconcileService = (log: FastifyBaseLogger) => ({
                                     userId: identity.userId,
                                     groups: memberships,
                                     marked,
+                                    projects,
                                 })
                             }
                             catch (err) {
