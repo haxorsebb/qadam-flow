@@ -116,7 +116,12 @@ export const projectMemberService = (log: FastifyBaseLogger) => ({
                 await assertNotLastAdmin({ entityManager, member, members, platformId: project.platformId })
             }
             if (role.id !== member.projectRoleId) {
-                await entityManager.update(ProjectMemberEntity, { id: member.id, projectId }, { projectRoleId: role.id })
+                await entityManager.update(ProjectMemberEntity, { id: member.id, projectId }, {
+                    projectRoleId: role.id,
+                    // Role edits do not convert an external membership into a permanent
+                    // manual grant: losing the source group must still revoke access.
+                    roleManuallySet: member.managedBy !== ProjectMemberManagedBy.MANUAL,
+                })
             }
             return getMemberWithUserOrThrow({ entityManager, projectId, memberId })
         })
