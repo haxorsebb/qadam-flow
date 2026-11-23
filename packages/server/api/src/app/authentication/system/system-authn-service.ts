@@ -80,13 +80,9 @@ export const systemAuthnService = (log: FastifyBaseLogger) => ({
         }
 
         if (marked !== null) {
-            try {
-                await groupProvider.reconcileUser({ platformId, userId: user.id, groups, marked })
-            }
-            catch (err) {
-                // Authentication is independent of a transient project sync failure.
-                log.error({ err, platformId, userId: user.id }, 'SYSTEM project reconciliation failed during sign-in')
-            }
+            // Do not issue a fresh session with potentially stale ADMIN/project
+            // grants if revocation reconciliation failed.
+            await groupProvider.reconcileUser({ platformId, userId: user.id, groups, marked })
         }
 
         log.info({ platformId, userId: user.id }, 'User signed in via system PAM')
