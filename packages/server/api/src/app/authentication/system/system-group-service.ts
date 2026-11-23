@@ -56,13 +56,13 @@ export const systemGroupService = (log: FastifyBaseLogger) => ({
 
     // This is the SYSTEM provider's group policy. The actual Qadam role and
     // membership writes are shared with LDAP by managedGroupGrantService.
-    async reconcileUser({ platformId, userId, groups, marked }: ReconcileUserParams): Promise<void> {
+    async reconcileUser({ platformId, userId, groups, marked, projects }: ReconcileUserParams): Promise<void> {
         const membership = new Set(groups)
-        const projects = await this.ensureMarkedTeamProjects({ platformId, marked })
+        const mappedProjects = projects ?? await this.ensureMarkedTeamProjects({ platformId, marked })
         const projectRoles = new Map<string, DefaultProjectRole>()
         for (const group of marked) {
             if (!membership.has(group.name)) continue
-            const project = projects.get(group.gid)
+            const project = mappedProjects.get(group.gid)
             if (project) projectRoles.set(project, DefaultProjectRole.VIEWER)
         }
         const adminGroup = process.env.AP_SYSTEM_AUTH_ADMIN_GROUP ?? 'qadam-admins'
@@ -120,4 +120,4 @@ export const systemGroupService = (log: FastifyBaseLogger) => ({
 })
 
 type EnsureParams = { platformId: PlatformId, marked: MarkedGroup[] }
-type ReconcileUserParams = EnsureParams & { userId: UserId, groups: string[] }
+type ReconcileUserParams = EnsureParams & { userId: UserId, groups: string[], projects?: Map<number, string> }
