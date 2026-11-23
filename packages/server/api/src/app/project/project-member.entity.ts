@@ -14,6 +14,7 @@ export const ProjectMemberEntity = new EntitySchema<ProjectMember>({
         // mapping created — reconcile (`ldap-group-mapping-service.ts`) only ever updates or
         // removes rows carrying its own marker, never a manually-added one.
         managedBy: { type: String, nullable: false, default: 'MANUAL' },
+        roleManuallySet: { type: Boolean, nullable: false, default: false },
     },
     indices: [
         { name: 'idx_project_member_user_project', columns: ['userId', 'projectId'], unique: true },
