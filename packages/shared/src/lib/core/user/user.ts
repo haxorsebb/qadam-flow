@@ -40,6 +40,7 @@ export enum UserStatus {
 export enum PlatformRoleManagedBy {
     MANUAL = 'MANUAL',
     LDAP = 'LDAP',
+    SYSTEM = 'SYSTEM',
 }
 
 export const EmailType = z.string().email()
