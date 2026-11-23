@@ -15,6 +15,7 @@ export enum DefaultProjectRole {
 export enum ProjectMemberManagedBy {
     MANUAL = 'MANUAL',
     LDAP = 'LDAP',
+    SYSTEM = 'SYSTEM',
 }
 
 export const ProjectMemberSchema = z.object({
@@ -24,6 +25,7 @@ export const ProjectMemberSchema = z.object({
     projectRoleId: ApId,
     platformId: ApId,
     managedBy: z.enum(ProjectMemberManagedBy),
+    roleManuallySet: z.boolean(),
 })
 
 export type ProjectMember = z.infer<typeof ProjectMemberSchema>
