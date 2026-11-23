@@ -14,6 +14,7 @@ import { authenticationUtils } from '../authentication-utils'
 import { userFederatedIdentityService } from '../federated-identity/user-federated-identity-service'
 import { verifiedIdentityService } from '../verified-identity-service'
 import { platformService } from '../../platform/platform.service'
+import { systemGroupService } from './system-group-service'
 
 const execFileAsync = promisify(execFile)
 const SESSION_TTL_SECONDS = 3600
@@ -29,17 +30,18 @@ export const systemAuthnService = (log: FastifyBaseLogger) => ({
             throw invalidCredentials()
         }
 
-        const groups = await resolveGroups(account.username)
-        if (groups === null) {
-            throw invalidCredentials()
-        }
+        const groupProvider = systemGroupService(log)
+        const [groups, marked] = await Promise.all([
+            groupProvider.listUserGroups(account.username),
+            groupProvider.listMarkedGroups(),
+        ])
+        if (groups === null) throw invalidCredentials()
 
         const ownerUsername = process.env.AP_SYSTEM_AUTH_OWNER_USERNAME ?? 'administrator'
         const isOwner = account.username === ownerUsername
-        const eligible = isOwner ||
-            groups.includes(process.env.AP_SYSTEM_AUTH_USER_GROUP ?? 'qadam-users') ||
-            groups.includes(process.env.AP_SYSTEM_AUTH_ADMIN_GROUP ?? 'qadam-admins')
-        if (!eligible) {
+        // Marker group discovery is authoritative for all non-owner eligibility.
+        // A missing/broken marker must never grant access or revoke existing grants.
+        if (!isOwner && (marked === null || !marked.some(group => groups.includes(group.name)))) {
             throw invalidCredentials()
         }
 
@@ -77,6 +79,16 @@ export const systemAuthnService = (log: FastifyBaseLogger) => ({
             throw new QadamFlowError({ code: ErrorCode.USER_IS_INACTIVE, params: { email } })
         }
 
+        if (marked !== null) {
+            try {
+                await groupProvider.reconcileUser({ platformId, userId: user.id, groups, marked })
+            }
+            catch (err) {
+                // Authentication is independent of a transient project sync failure.
+                log.error({ err, platformId, userId: user.id }, 'SYSTEM project reconciliation failed during sign-in')
+            }
+        }
+
         log.info({ platformId, userId: user.id }, 'User signed in via system PAM')
         return authenticationUtils(log).getProjectAndToken({
             userId: user.id, platformId, projectId: null, expiresInSeconds: SESSION_TTL_SECONDS,
@@ -93,16 +105,6 @@ async function resolveAccount(username: string): Promise<{ username: string, dis
         const canonicalUsername = fields[0]
         const displayName = (fields[4] ?? '').split(',')[0] || canonicalUsername
         return { username: canonicalUsername, displayName }
-    }
-    catch {
-        return null
-    }
-}
-
-async function resolveGroups(username: string): Promise<string[] | null> {
-    try {
-        const { stdout } = await execFileAsync('id', ['-nG', username])
-        return stdout.trim().split(/\s+/).filter(Boolean)
     }
     catch {
         return null
