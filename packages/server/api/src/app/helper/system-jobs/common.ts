@@ -37,6 +37,7 @@ export enum SystemJobName {
     JOIN_WAITPOINT_TIMEOUT = 'join-waitpoint-timeout',
     APPLY_DELIVERY_MODE_CHANGE = 'apply-delivery-mode-change',
     LDAP_RECONCILE = 'ldap-reconcile',
+    SYSTEM_RECONCILE = 'system-reconcile', 
     QADAM_CONTEXT_VERSION_BACKFILL = 'qadam-context-version-backfill',
     QADAM_VERSION_STORE_GC = 'qadam-version-store-gc',
 }
@@ -104,6 +105,7 @@ type SystemJobDataMap = {
     [SystemJobName.JOIN_WAITPOINT_TIMEOUT]: JoinWaitpointTimeoutSystemJobData
     [SystemJobName.APPLY_DELIVERY_MODE_CHANGE]: ApplyDeliveryModeChangeSystemJobData
     [SystemJobName.LDAP_RECONCILE]: Record<string, never>
+    [SystemJobName.SYSTEM_RECONCILE]: Record<string, never>
     [SystemJobName.QADAM_CONTEXT_VERSION_BACKFILL]: Record<string, never>
     [SystemJobName.QADAM_VERSION_STORE_GC]: Record<string, never>
 }
