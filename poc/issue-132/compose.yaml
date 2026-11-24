@@ -55,12 +55,15 @@ services:
       retries: 20
 
   redis:
-    image: valkey/valkey:8.1.11
+    # Match the production appliance's immutable Docker Hardened Redis image.
+    # Keep POC persistence separate from Valkey: RDB/AOF formats may differ.
+    image: dhi.io/redis@sha256:ccfe3bb781ab25db6016e39075d3e249e8cf77f3b23b30a35d4f73f75a46269b
     restart: unless-stopped
+    command: ["redis-server", "--dir", "/data", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
     volumes:
-      - redis_data:/data
+      - redis_dhi_data:/data
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: ["CMD", "redis-cli", "PING"]
       interval: 3s
       timeout: 3s
       retries: 20
@@ -69,7 +72,7 @@ volumes:
   cache:
   qadam_versions:
   pgdata:
-  redis_data:
+  redis_dhi_data:
 
 # The first POC boot requires no outbound connectivity. Later tests will
 # require explicit, constrained access to the local inference endpoints.
