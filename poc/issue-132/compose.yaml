@@ -57,9 +57,11 @@ services:
   redis:
     # Match the production appliance's immutable Docker Hardened Redis image.
     # Keep POC persistence separate from Valkey: RDB/AOF formats may differ.
+    # POC ONLY: no credentials are provisioned; allow access from app on the
+    # internal Compose network. Production uses authenticated Redis ACLs.
     image: dhi.io/redis@sha256:ccfe3bb781ab25db6016e39075d3e249e8cf77f3b23b30a35d4f73f75a46269b
     restart: unless-stopped
-    command: ["redis-server", "--dir", "/data", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
+    command: ["redis-server", "--dir", "/data", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction", "--protected-mode", "no"]
     volumes:
       - redis_dhi_data:/data
     healthcheck:
