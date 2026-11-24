@@ -152,12 +152,15 @@ RUN node -e "\
 FROM ${APP_BASE_IMAGE} AS run
 
 # Node 24 and Bun use glibc ABI compatible with newer Debian 13 userspace.
-# Only the Node/Bun executables are required from the build toolchain at runtime.
-# Do not copy global npm, TypeScript, esbuild, node-gyp, Corepack or Node headers.
+# Node and Bun are required at runtime. Code-step compilation also spawns
+# the esbuild CLI; copy its installed executable, not the entire global npm tree.
+# Keep npm, TypeScript, node-gyp, Corepack and Node headers in the build stage.
 # Retain the exact isolated-vm binary compiled against the Node build stage.
 COPY --from=base /usr/local/bin/node /usr/local/bin/node
 COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=base /usr/local/lib/node_modules/esbuild/bin/esbuild /usr/local/bin/esbuild
 COPY --from=base /usr/src/node_modules/ /usr/src/node_modules/
+RUN test "$(esbuild --version)" = "0.25.0"
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 REDISMS_DISABLE_POSTINSTALL=1
 # The appliance base already supplies libpam-sss and libnss-sss.
 # Build-time compilers and utilities stay in the build stage; add runtime
