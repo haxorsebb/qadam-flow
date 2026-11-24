@@ -82,8 +82,9 @@ export const systemGroupService = (log: FastifyBaseLogger) => ({
                 const projects = new Map<number, string>()
                 for (const group of marked) {
                     const externalId = externalIdFor(group)
-                    let project = await projectRepo().findOneBy({ platformId, externalId, type: ProjectType.TEAM })
-                    if (!project) {
+                    const linked = await projectRepo().findOneBy({ platformId, externalId, type: ProjectType.TEAM })
+                    let projectId: string | undefined = linked?.id
+                    if (!projectId) {
                         // Fresh appliances start without TEAM projects, but adopting a
                         // pre-created same-name TEAM is explicitly supported.
                         const named = await projectRepo().findOneBy({
@@ -98,11 +99,14 @@ export const systemGroupService = (log: FastifyBaseLogger) => ({
                             if (!named.externalId) {
                                 await projectRepo().update({ id: named.id, externalId: IsNull() }, { externalId })
                             }
-                            project = await projectRepo().findOneBy({ platformId, externalId, type: ProjectType.TEAM })
+                            const associated = await projectRepo().findOneBy({
+                                platformId, externalId, type: ProjectType.TEAM,
+                            })
+                            projectId = associated?.id
                         }
                     }
-                    if (!project) {
-                        project = await projectService(log).create({
+                    if (!projectId) {
+                        const created = await projectService(log).create({
                             platformId,
                             ownerId: owner,
                             displayName: group.name,
@@ -110,8 +114,9 @@ export const systemGroupService = (log: FastifyBaseLogger) => ({
                             externalId,
                             callPostCreateHooks: false,
                         })
+                        projectId = created.id
                     }
-                    projects.set(group.gid, project.id)
+                    projects.set(group.gid, projectId)
                 }
                 return projects
             },
