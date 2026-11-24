@@ -4,7 +4,7 @@ name: qadam132
 
 services:
   app:
-    image: qadam-flow:poc-ed75e16
+    image: qadam-flow:poc-runtime-trim-ca9cd21
     pull_policy: never
     restart: unless-stopped
     ports:
@@ -25,7 +25,7 @@ services:
       - qadam_versions:/var/lib/qadam-flow/qadam-versions
 
   worker:
-    image: qadam-flow:poc-ed75e16
+    image: qadam-flow:poc-runtime-trim-ca9cd21
     pull_policy: never
     restart: unless-stopped
     env_file: .env
@@ -57,15 +57,17 @@ services:
   redis:
     # Match the production appliance's immutable Docker Hardened Redis image.
     # Keep POC persistence separate from Valkey: RDB/AOF formats may differ.
-    # POC ONLY: no credentials are provisioned; allow access from app on the
-    # internal Compose network. Production uses authenticated Redis ACLs.
+    # Enforce Redis ACL authentication, like the production appliance.
+    # redis-users.acl contains a SHA-256 password hash, not the plaintext credential.
     image: dhi.io/redis@sha256:ccfe3bb781ab25db6016e39075d3e249e8cf77f3b23b30a35d4f73f75a46269b
     restart: unless-stopped
-    command: ["redis-server", "--dir", "/data", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction", "--protected-mode", "no"]
+    command: ["redis-server", "--dir", "/data", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction", "--aclfile", "/run/secrets/redis_acl"]
     volumes:
       - redis_dhi_data:/data
+    secrets:
+      - redis_acl
     healthcheck:
-      test: ["CMD", "redis-cli", "PING"]
+      test: ["CMD", "redis-cli", "--user", "health", "--pass", "qadam132-healthcheck", "--no-auth-warning", "PING"]
       interval: 3s
       timeout: 3s
       retries: 20
@@ -75,6 +77,10 @@ volumes:
   qadam_versions:
   pgdata:
   redis_dhi_data:
+
+secrets:
+  redis_acl:
+    file: ./redis-users.acl
 
 # The first POC boot requires no outbound connectivity. Later tests will
 # require explicit, constrained access to the local inference endpoints.
