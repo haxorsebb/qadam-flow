@@ -1,6 +1,9 @@
 ARG APP_BASE_IMAGE=ghcr.io/haxorsebb/n8n-appliance-app-base:debian13
 
-FROM node:24.21.0-bookworm-slim AS base
+# Build and runtime are both Debian 13 (Trixie). Keep Node 24.21.0 fixed
+# while qualifying the same userspace generation as the hardened runtime.
+FROM node:24.21.0-trixie-slim AS base
+RUN . /etc/os-release && test "$VERSION_ID" = "13"
 
 ARG SKIP_SSL_VERIFY=
 
@@ -147,11 +150,13 @@ RUN node -e "\
 " > packages/server/api/dist/src/migration-manifest.json
 
 ### STAGE 2: Appliance runtime (Debian 13 with PAM/NSS/SSSD clients) ###
-# The Node/Bun/isolated-vm build remains on its verified Node 24 toolchain.
+# Node/Bun/isolated-vm are built on Debian 13 with the same Node 24.21.0
+# release used by the hardened Debian 13 application runtime.
 # Release qualification pins the app-base by digest; local POC uses the tagged image.
 FROM ${APP_BASE_IMAGE} AS run
+RUN . /etc/os-release && test "$VERSION_ID" = "13"
 
-# Node 24 and Bun use glibc ABI compatible with newer Debian 13 userspace.
+# Node 24, Bun and native addons are built on Debian 13 and run on Debian 13.
 # Node and Bun are required at runtime. Code-step compilation also spawns
 # the esbuild CLI; copy its installed executable, not the entire global npm tree.
 # Keep npm, TypeScript, node-gyp, Corepack and Node headers in the build stage.
@@ -163,17 +168,21 @@ COPY --from=base /usr/src/node_modules/ /usr/src/node_modules/
 RUN test "$(esbuild --version)" = "0.25.0"
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 REDISMS_DISABLE_POSTINSTALL=1
 # The appliance base already supplies libpam-sss and libnss-sss.
-# The worker's tree-kill dependency invokes 'ps' to enumerate subprocesses;
-# omit procps and code-step compilation crashes with 'spawn ps ENOENT'.
-# Keep build-time compilers and unrelated utilities out of the final image.
+# The worker's tree-kill dependency invokes 'ps' to enumerate subprocesses.
+# Built-in PDF-to-image actions require pdftoppm (poppler-utils); multilingual
+# PDF handling uses poppler-data. Kernel-enforced strict sandbox egress needs
+# iptables and ip6tables. Keep build-time compilers out of the final image.
 # The DHI base currently ships libtinfo6 at +dhi4, which dpkg sorts above
 # +deb13u0+dhi5. Pin the matching DHI ncurses packages and allow the
 # version-order downgrade so procps can be installed without mixing ABIs.
 RUN apt-get update && apt-get install -y --allow-downgrades --no-install-recommends \
         libtinfo6=6.5+20250216-2+deb13u0+dhi5 \
         libncursesw6=6.5+20250216-2+deb13u0+dhi5 \
-        pamtester tini procps \
+        pamtester tini procps poppler-utils poppler-data iptables \
     && command -v ps \
+    && command -v pdftoppm \
+    && command -v iptables \
+    && command -v ip6tables \
     && printf '%s\n' 'auth required pam_sss.so' 'account required pam_sss.so' > /etc/pam.d/qadam \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
