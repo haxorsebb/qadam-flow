@@ -163,10 +163,12 @@ COPY --from=base /usr/src/node_modules/ /usr/src/node_modules/
 RUN test "$(esbuild --version)" = "0.25.0"
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 REDISMS_DISABLE_POSTINSTALL=1
 # The appliance base already supplies libpam-sss and libnss-sss.
-# Build-time compilers and utilities stay in the build stage; add runtime
-# dependencies individually only after a demonstrated application requirement.
+# The worker's tree-kill dependency invokes 'ps' to enumerate subprocesses;
+# omit procps and code-step compilation crashes with 'spawn ps ENOENT'.
+# Keep build-time compilers and unrelated utilities out of the final image.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        pamtester tini \
+        pamtester tini procps \
+    && command -v ps \
     && printf '%s\n' 'auth required pam_sss.so' 'account required pam_sss.so' > /etc/pam.d/qadam \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
