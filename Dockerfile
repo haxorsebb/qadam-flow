@@ -166,7 +166,12 @@ ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 REDISMS_DISABLE_POSTINSTALL=1
 # The worker's tree-kill dependency invokes 'ps' to enumerate subprocesses;
 # omit procps and code-step compilation crashes with 'spawn ps ENOENT'.
 # Keep build-time compilers and unrelated utilities out of the final image.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# The DHI base currently ships libtinfo6 at +dhi4, which dpkg sorts above
+# +deb13u0+dhi5. Pin the matching DHI ncurses packages and allow the
+# version-order downgrade so procps can be installed without mixing ABIs.
+RUN apt-get update && apt-get install -y --allow-downgrades --no-install-recommends \
+        libtinfo6=6.5+20250216-2+deb13u0+dhi5 \
+        libncursesw6=6.5+20250216-2+deb13u0+dhi5 \
         pamtester tini procps \
     && command -v ps \
     && printf '%s\n' 'auth required pam_sss.so' 'account required pam_sss.so' > /etc/pam.d/qadam \
