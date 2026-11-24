@@ -36,21 +36,24 @@ async function applyPlatformRole({ platformId, userId, managedBy, platformRole, 
     ])
     if (user.id === platform.ownerId) return
 
+    const roleManagedBy = managedBy === ProjectMemberManagedBy.LDAP
+        ? PlatformRoleManagedBy.LDAP
+        : PlatformRoleManagedBy.SYSTEM
     const manual = user.platformRoleManagedBy === PlatformRoleManagedBy.MANUAL
     // Never take ownership of a role governed by another external provider.
-    if (!manual && user.platformRoleManagedBy !== managedBy) return
+    if (!manual && user.platformRoleManagedBy !== roleManagedBy) return
 
     if (!isNil(platformRole)) {
         // Directory grants may promote manual roles, but never demote them.
         if (manual && roleRank[platformRole] <= roleRank[user.platformRole]) return
-        if (user.platformRole === platformRole && user.platformRoleManagedBy === managedBy) return
+        if (user.platformRole === platformRole && user.platformRoleManagedBy === roleManagedBy) return
         await userService(log).transitionPlatformRoleIfCurrentlyEquals({
             id: userId,
             platformId,
             expectedPlatformRole: user.platformRole,
             expectedPlatformRoleManagedBy: user.platformRoleManagedBy,
             newPlatformRole: platformRole,
-            newPlatformRoleManagedBy: managedBy,
+            newPlatformRoleManagedBy: roleManagedBy,
             newPlatformRoleManualBaseline: manual ? user.platformRole : (user.platformRoleManualBaseline ?? null),
         })
         return
@@ -64,9 +67,9 @@ async function applyPlatformRole({ platformId, userId, managedBy, platformRole, 
             id: userId,
             platformId,
             expectedPlatformRole: user.platformRole,
-            expectedPlatformRoleManagedBy: managedBy,
+            expectedPlatformRoleManagedBy: roleManagedBy,
             newPlatformRole: baseline,
-            newPlatformRoleManagedBy: restoringManual ? PlatformRoleManagedBy.MANUAL : managedBy,
+            newPlatformRoleManagedBy: restoringManual ? PlatformRoleManagedBy.MANUAL : roleManagedBy,
             newPlatformRoleManualBaseline: null,
         })
     }
